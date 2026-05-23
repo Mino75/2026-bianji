@@ -3,6 +3,8 @@ FROM node:22-alpine
 WORKDIR /app
 
 COPY package*.json ./
+COPY styles.css* .
+
 RUN npm install
 
 COPY server.js README.md styles.css ./
