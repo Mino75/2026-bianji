@@ -1020,6 +1020,7 @@ function hashPin(value) {
 
   pinForm.addEventListener("submit", async function (event) {
     event.preventDefault();
+    console.log("PIN submit triggered");
     const pin = pinInput.value.trim();
 
     if (!/^\\d{4}$/.test(pin)) {
