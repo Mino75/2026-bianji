@@ -635,18 +635,7 @@ function renderLayout({ title, active, content, script = "" }) {
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body data-token="${SESSION_TOKEN}">
-  <div id="pinGate" class="pin-gate" hidden>
-    <form class="pin-card" id="pinForm">
-      <div class="eyebrow">Local access</div>
-      <h1>Unlock console</h1>
-      <p id="pinHint">Create a 4-digit PIN for this browser.</p>
-      <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="••••" autocomplete="off" required>
-      <button type="submit">Continue</button>
-      <p class="microcopy">The PIN is stored in this browser only. It is a local convenience lock, not remote authentication.</p>
-    </form>
-  </div>
-
-  <div id="appShell" hidden>
+  <div id="appShell">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">P</div>
@@ -981,72 +970,8 @@ function tokenInput() {
 function clientBootstrapScript() {
   return `
 (function () {
-  const pinKey = "localPublisherConsole.pinHash";
-  const pinGate = document.getElementById("pinGate");
-  const appShell = document.getElementById("appShell");
-  const pinForm = document.getElementById("pinForm");
-  const pinInput = document.getElementById("pinInput");
-  const pinHint = document.getElementById("pinHint");
-
-function hashPin(value) {
-  let hash = 0;
-
-  for (let i = 0; i < value.length; i++) {
-    hash = ((hash << 5) - hash) + value.charCodeAt(i);
-    hash |= 0;
-  }
-
-  return String(hash);
-}
-
-  function unlock() {
-    pinGate.hidden = true;
-    appShell.hidden = false;
-    renderPreview();
-    syncCredentialMode();
-  }
-
-  function lock() {
-    appShell.hidden = true;
-    pinGate.hidden = false;
-    pinInput.focus();
-  }
-
-  if (!localStorage.getItem(pinKey)) {
-    pinHint.textContent = "Create a 4-digit PIN for this browser.";
-  } else {
-    pinHint.textContent = "Enter your 4-digit PIN.";
-  }
-
-  pinForm.addEventListener("submit", async function (event) {
-    event.preventDefault();
-    console.log("PIN submit triggered");
-    const pin = pinInput.value.trim();
-
-    if (!/^\\d{4}$/.test(pin)) {
-      pinHint.textContent = "The PIN must contain exactly 4 digits.";
-      return;
-    }
-
-    const hash = hashPin(pin);
-    const current = localStorage.getItem(pinKey);
-
-    if (!current) {
-      localStorage.setItem(pinKey, hash);
-      unlock();
-      return;
-    }
-
-    if (hash === current) {
-      unlock();
-      return;
-    }
-
-    pinInput.value = "";
-    pinHint.textContent = "Invalid PIN.";
-  });
-
-  lock();
+  syncCredentialMode();
+  renderPreview();
 
   function syncCredentialMode() {
     const selected = document.querySelector('input[name="credentialsMode"]:checked');
