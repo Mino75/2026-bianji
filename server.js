@@ -292,7 +292,7 @@ function decodeEscapedHtml(value) {
     if (!/[\\][nrt"]/.test(output)) break;
 
     try {
-      output = JSON.parse(`"${output.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`);
+      output = JSON.parse('"' + output.replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + '"');
     } catch {
       break;
     }
@@ -445,343 +445,273 @@ function renderDashboard() {
 }
 
 function clientScript() {
-  return `
-(function () {
-  const storeKey = "localPublisherConsole.publishers.v1";
-  let activePublisherId = "";
-  let activeItemSlug = "";
-
-  const $ = function (id) {
-    return document.getElementById(id);
-  };
-
-  function getPublishers() {
-    try {
-      return JSON.parse(localStorage.getItem(storeKey) || "[]");
-    } catch {
-      return [];
-    }
-  }
-
-  function setPublishers(publishers) {
-    localStorage.setItem(storeKey, JSON.stringify(publishers));
-  }
-
-  function publisherIdFrom(label, baseUrl, type) {
-    return [label, baseUrl, type]
-      .join("-")
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-  }
-
-  function getActivePublisher() {
-    return getPublishers().find(function (publisher) {
-      return publisher.id === activePublisherId;
-    }) || null;
-  }
-
-  function notify(message, kind) {
-    const box = $("notice");
-    box.hidden = false;
-    box.className = "notice " + (kind || "success");
-    box.textContent = message;
-    setTimeout(function () {
-      box.hidden = true;
-    }, 4500);
-  }
-
-  async function postJson(url, payload) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const text = await response.text();
-    let body = null;
-
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { rawBody: text };
-    }
-
-    if (!response.ok) {
-      throw new Error(body.error || body.rawBody || "Request failed.");
-    }
-
-    return body;
-  }
-
-  function publisherPayload() {
-    const publisher = getActivePublisher();
-
-    if (!publisher) {
-      throw new Error("No active publisher selected.");
-    }
-
-    return {
-      baseUrl: publisher.baseUrl,
-      type: publisher.type,
-      apiKey: publisher.apiKey
-    };
-  }
-
-  function escapeHtml(value) {
-    return String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-  }
-
-  function escapeAttr(value) {
-    return escapeHtml(value).replaceAll("`", "&#96;");
-  }
-
-  window.loadPublishers = function () {
-    const publishers = getPublishers();
-    const target = $("publishersList");
-
-    if (!publishers.length) {
-      target.className = "empty";
-      target.innerHTML = "No publisher configured.";
-      return;
-    }
-
-    target.className = "table-wrap";
-    target.innerHTML =
-      "<table>" +
-      "<thead><tr><th>Label</th><th>Base URL</th><th>Type</th><th></th></tr></thead>" +
-      "<tbody>" +
-      publishers.map(function (publisher) {
-        return "<tr>" +
-          "<td><strong>" + escapeHtml(publisher.label || publisher.type) + "</strong></td>" +
-          "<td><code>" + escapeHtml(publisher.baseUrl) + "</code></td>" +
-          "<td><code>" + escapeHtml(publisher.type) + "</code></td>" +
-          "<td class='right'>" +
-            "<button class='button small js-open-publisher' type='button' data-id='" + escapeAttr(publisher.id) + "'>Open</button> " +
-            "<button class='button small ghost js-delete-publisher' type='button' data-id='" + escapeAttr(publisher.id) + "'>Delete</button>" +
-          "</td>" +
-        "</tr>";
-      }).join("") +
-      "</tbody></table>";
-  };
-
-  window.selectPublisher = async function (publisherId) {
-    activePublisherId = publisherId;
-    activeItemSlug = "";
-    $("itemsPanel").hidden = false;
-    $("editorForm").hidden = true;
-    await reloadItems();
-  };
-
-  window.removePublisher = function (publisherId) {
-    if (!confirm("Delete this publisher from this browser?")) return;
-
-    const publishers = getPublishers().filter(function (publisher) {
-      return publisher.id !== publisherId;
-    });
-
-    setPublishers(publishers);
-
-    if (activePublisherId === publisherId) {
-      activePublisherId = "";
-      $("itemsPanel").hidden = true;
-      $("editorForm").hidden = true;
-    }
-
-    loadPublishers();
-  };
-
-  window.reloadItems = async function () {
-    try {
-      const body = await postJson("/api/proxy/list", publisherPayload());
-      const items = Array.isArray(body.items) ? body.items : [];
-      const target = $("itemsList");
-
-      if (!items.length) {
-        target.className = "empty";
-        target.innerHTML = "No item returned.";
-        return;
-      }
-
-      target.className = "table-wrap";
-      target.innerHTML =
-        "<table>" +
-        "<thead><tr><th>Title</th><th>Slug</th><th>Updated</th><th></th></tr></thead>" +
-        "<tbody>" +
-        items.map(function (item) {
-          return "<tr>" +
-            "<td><strong>" + escapeHtml(item.title || item.slug || "Untitled") + "</strong><small>" + escapeHtml(item.excerpt || "") + "</small></td>" +
-            "<td><code>" + escapeHtml(item.slug || "") + "</code></td>" +
-            "<td>" + escapeHtml(item.updatedAt || item.publishedAt || "") + "</td>" +
-            "<td class='right'><button class='button small js-open-item' type='button' data-slug='" + escapeAttr(item.slug || "") + "'>Edit</button></td>" +
-          "</tr>";
-        }).join("") +
-        "</tbody></table>";
-    } catch (error) {
-      notify(error.message, "error");
-    }
-  };
-
-  window.openItem = async function (slug) {
-    try {
-      activeItemSlug = slug;
-
-      const body = await postJson("/api/proxy/read", {
-        ...publisherPayload(),
-        slug
-      });
-
-      const item = Array.isArray(body.items) ? body.items[0] : null;
-
-      if (!item) throw new Error("Item not found.");
-
-      $("editorForm").hidden = false;
-      $("targetSlug").value = item.slug || slug;
-      $("slug").value = item.slug || slug;
-      $("title").value = item.title || "";
-      $("excerpt").value = item.excerpt || "";
-      $("publishedAt").value = item.publishedAt || new Date().toISOString();
-      $("tags").value = Array.isArray(item.tags) ? item.tags.join(", ") : "";
-      $("html").value = item.html || "";
-
-      renderPreview();
-    } catch (error) {
-      notify(error.message, "error");
-    }
-  };
-
-  function collectArticle() {
-    return {
-      targetSlug: $("targetSlug").value.trim() || activeItemSlug || $("slug").value.trim(),
-      slug: $("slug").value.trim(),
-      title: $("title").value.trim(),
-      excerpt: $("excerpt").value.trim(),
-      publishedAt: $("publishedAt").value.trim() || new Date().toISOString(),
-      tags: $("tags").value,
-      html: $("html").value
-    };
-  }
-
-  $("publisherForm").addEventListener("submit", function (event) {
-    event.preventDefault();
-
-    const label = $("label").value.trim() || $("type").value.trim();
-    const baseUrl = $("baseUrl").value.trim().replace(/\/$/, "");
-    const type = $("type").value.trim() || "article";
-    const apiKey = $("apiKey").value.trim();
-
-    if (!baseUrl || !apiKey || !type) {
-      notify("Base URL, content type and API key are required.", "error");
-      return;
-    }
-
-    const id = publisherIdFrom(label, baseUrl, type);
-    const publishers = getPublishers().filter(function (publisher) {
-      return publisher.id !== id;
-    });
-
-    publishers.push({ id, label, baseUrl, type, apiKey });
-    setPublishers(publishers);
-    loadPublishers();
-    notify("Publisher saved in this browser.");
-  });
-
-  $("editorForm").addEventListener("submit", async function (event) {
-    event.preventDefault();
-
-    try {
-      await postJson("/api/proxy/save", {
-        ...publisherPayload(),
-        article: collectArticle()
-      });
-
-      notify("Item saved.");
-      await reloadItems();
-    } catch (error) {
-      notify(error.message, "error");
-    }
-  });
-
-  window.createItem = async function () {
-    try {
-      await postJson("/api/proxy/create", {
-        ...publisherPayload(),
-        article: collectArticle()
-      });
-
-      notify("Item created.");
-      await reloadItems();
-    } catch (error) {
-      notify(error.message, "error");
-    }
-  };
-
-  window.deleteItem = async function () {
-    if (!confirm("Delete this item?")) return;
-
-    try {
-      await postJson("/api/proxy/delete", {
-        ...publisherPayload(),
-        slug: $("targetSlug").value.trim() || activeItemSlug
-      });
-
-      notify("Item deleted.");
-      $("editorForm").hidden = true;
-      await reloadItems();
-    } catch (error) {
-      notify(error.message, "error");
-    }
-  };
-
-  window.togglePreview = function () {
-    const panel = $("previewPanel");
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) renderPreview();
-  };
-
-  function renderPreview() {
-    const field = $("html");
-    const frame = $("previewFrame");
-    if (!field || !frame) return;
-
-    const doc = frame.contentDocument || frame.contentWindow.document;
-    doc.open();
-    doc.write("<!doctype html><html><head><meta charset='utf-8'><base target='_blank'><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.6;margin:28px;color:#111827}img{max-width:100%;height:auto}</style></head><body>" + field.value + "</body></html>");
-    doc.close();
-  }
-
-  document.addEventListener("click", function (event) {
-    const openPublisherButton = event.target.closest(".js-open-publisher");
-    if (openPublisherButton) {
-      selectPublisher(openPublisherButton.dataset.id);
-      return;
-    }
-
-    const deletePublisherButton = event.target.closest(".js-delete-publisher");
-    if (deletePublisherButton) {
-      removePublisher(deletePublisherButton.dataset.id);
-      return;
-    }
-
-    const openItemButton = event.target.closest(".js-open-item");
-    if (openItemButton) {
-      openItem(openItemButton.dataset.slug);
-    }
-  });
-
-  $("html").addEventListener("input", function () {
-    clearTimeout(window.__previewTimer);
-    window.__previewTimer = setTimeout(renderPreview, 250);
-  });
-
-  loadPublishers();
-})();`;
+  return "\n" +
+"(function () {\n" +
+"  const storeKey = 'localPublisherConsole.publishers.v1';\n" +
+"  let activePublisherId = '';\n" +
+"  let activeItemSlug = '';\n" +
+"\n" +
+"  const $ = function (id) { return document.getElementById(id); };\n" +
+"\n" +
+"  function getPublishers() {\n" +
+"    try { return JSON.parse(localStorage.getItem(storeKey) || '[]'); }\n" +
+"    catch { return []; }\n" +
+"  }\n" +
+"\n" +
+"  function setPublishers(publishers) {\n" +
+"    localStorage.setItem(storeKey, JSON.stringify(publishers));\n" +
+"  }\n" +
+"\n" +
+"  function publisherIdFrom(label, baseUrl, type) {\n" +
+"    return [label, baseUrl, type].join('-').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');\n" +
+"  }\n" +
+"\n" +
+"  function getActivePublisher() {\n" +
+"    return getPublishers().find(function (publisher) { return publisher.id === activePublisherId; }) || null;\n" +
+"  }\n" +
+"\n" +
+"  function notify(message, kind) {\n" +
+"    const box = $('notice');\n" +
+"    box.hidden = false;\n" +
+"    box.className = 'notice ' + (kind || 'success');\n" +
+"    box.textContent = message;\n" +
+"    setTimeout(function () { box.hidden = true; }, 4500);\n" +
+"  }\n" +
+"\n" +
+"  async function postJson(url, payload) {\n" +
+"    const response = await fetch(url, {\n" +
+"      method: 'POST',\n" +
+"      headers: { 'content-type': 'application/json' },\n" +
+"      body: JSON.stringify(payload)\n" +
+"    });\n" +
+"\n" +
+"    const text = await response.text();\n" +
+"    let body = null;\n" +
+"    try { body = JSON.parse(text); }\n" +
+"    catch { body = { rawBody: text }; }\n" +
+"\n" +
+"    if (!response.ok) {\n" +
+"      throw new Error(body.error || body.rawBody || 'Request failed.');\n" +
+"    }\n" +
+"\n" +
+"    return body;\n" +
+"  }\n" +
+"\n" +
+"  function publisherPayload() {\n" +
+"    const publisher = getActivePublisher();\n" +
+"    if (!publisher) throw new Error('No active publisher selected.');\n" +
+"    return { baseUrl: publisher.baseUrl, type: publisher.type, apiKey: publisher.apiKey };\n" +
+"  }\n" +
+"\n" +
+"  function escapeHtml(value) {\n" +
+"    return String(value || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\\\"', '&quot;').replaceAll(\"'\", '&#39;');\n" +
+"  }\n" +
+"\n" +
+"  function escapeAttr(value) { return escapeHtml(value); }\n" +
+"\n" +
+"  window.loadPublishers = function () {\n" +
+"    const publishers = getPublishers();\n" +
+"    const target = $('publishersList');\n" +
+"\n" +
+"    if (!publishers.length) {\n" +
+"      target.className = 'empty';\n" +
+"      target.innerHTML = 'No publisher configured.';\n" +
+"      return;\n" +
+"    }\n" +
+"\n" +
+"    target.className = 'table-wrap';\n" +
+"    target.innerHTML = '<table>' +\n" +
+"      '<thead><tr><th>Label</th><th>Base URL</th><th>Type</th><th></th></tr></thead>' +\n" +
+"      '<tbody>' +\n" +
+"      publishers.map(function (publisher) {\n" +
+"        return '<tr>' +\n" +
+"          '<td><strong>' + escapeHtml(publisher.label || publisher.type) + '</strong></td>' +\n" +
+"          '<td><code>' + escapeHtml(publisher.baseUrl) + '</code></td>' +\n" +
+"          '<td><code>' + escapeHtml(publisher.type) + '</code></td>' +\n" +
+"          '<td class=\\\"right\\\">' +\n" +
+"            '<button class=\\\"button small js-open-publisher\\\" type=\\\"button\\\" data-id=\\\"' + escapeAttr(publisher.id) + '\\\">Open</button> ' +\n" +
+"            '<button class=\\\"button small ghost js-delete-publisher\\\" type=\\\"button\\\" data-id=\\\"' + escapeAttr(publisher.id) + '\\\">Delete</button>' +\n" +
+"          '</td>' +\n" +
+"        '</tr>';\n" +
+"      }).join('') +\n" +
+"      '</tbody></table>';\n" +
+"  };\n" +
+"\n" +
+"  window.selectPublisher = async function (publisherId) {\n" +
+"    activePublisherId = publisherId;\n" +
+"    activeItemSlug = '';\n" +
+"    $('itemsPanel').hidden = false;\n" +
+"    $('editorForm').hidden = true;\n" +
+"    await reloadItems();\n" +
+"  };\n" +
+"\n" +
+"  window.removePublisher = function (publisherId) {\n" +
+"    if (!confirm('Delete this publisher from this browser?')) return;\n" +
+"\n" +
+"    const publishers = getPublishers().filter(function (publisher) { return publisher.id !== publisherId; });\n" +
+"    setPublishers(publishers);\n" +
+"\n" +
+"    if (activePublisherId === publisherId) {\n" +
+"      activePublisherId = '';\n" +
+"      $('itemsPanel').hidden = true;\n" +
+"      $('editorForm').hidden = true;\n" +
+"    }\n" +
+"\n" +
+"    loadPublishers();\n" +
+"  };\n" +
+"\n" +
+"  window.reloadItems = async function () {\n" +
+"    try {\n" +
+"      const body = await postJson('/api/proxy/list', publisherPayload());\n" +
+"      const items = Array.isArray(body.items) ? body.items : [];\n" +
+"      const target = $('itemsList');\n" +
+"\n" +
+"      if (!items.length) {\n" +
+"        target.className = 'empty';\n" +
+"        target.innerHTML = 'No item returned.';\n" +
+"        return;\n" +
+"      }\n" +
+"\n" +
+"      target.className = 'table-wrap';\n" +
+"      target.innerHTML = '<table>' +\n" +
+"        '<thead><tr><th>Title</th><th>Slug</th><th>Updated</th><th></th></tr></thead>' +\n" +
+"        '<tbody>' +\n" +
+"        items.map(function (item) {\n" +
+"          return '<tr>' +\n" +
+"            '<td><strong>' + escapeHtml(item.title || item.slug || 'Untitled') + '</strong><small>' + escapeHtml(item.excerpt || '') + '</small></td>' +\n" +
+"            '<td><code>' + escapeHtml(item.slug || '') + '</code></td>' +\n" +
+"            '<td>' + escapeHtml(item.updatedAt || item.publishedAt || '') + '</td>' +\n" +
+"            '<td class=\\\"right\\\"><button class=\\\"button small js-open-item\\\" type=\\\"button\\\" data-slug=\\\"' + escapeAttr(item.slug || '') + '\\\">Edit</button></td>' +\n" +
+"          '</tr>';\n" +
+"        }).join('') +\n" +
+"        '</tbody></table>';\n" +
+"    } catch (error) {\n" +
+"      notify(error.message, 'error');\n" +
+"    }\n" +
+"  };\n" +
+"\n" +
+"  window.openItem = async function (slug) {\n" +
+"    try {\n" +
+"      activeItemSlug = slug;\n" +
+"      const body = await postJson('/api/proxy/read', Object.assign({}, publisherPayload(), { slug: slug }));\n" +
+"      const item = Array.isArray(body.items) ? body.items[0] : null;\n" +
+"      if (!item) throw new Error('Item not found.');\n" +
+"\n" +
+"      $('editorForm').hidden = false;\n" +
+"      $('targetSlug').value = item.slug || slug;\n" +
+"      $('slug').value = item.slug || slug;\n" +
+"      $('title').value = item.title || '';\n" +
+"      $('excerpt').value = item.excerpt || '';\n" +
+"      $('publishedAt').value = item.publishedAt || new Date().toISOString();\n" +
+"      $('tags').value = Array.isArray(item.tags) ? item.tags.join(', ') : '';\n" +
+"      $('html').value = item.html || '';\n" +
+"      renderPreview();\n" +
+"    } catch (error) {\n" +
+"      notify(error.message, 'error');\n" +
+"    }\n" +
+"  };\n" +
+"\n" +
+"  function collectArticle() {\n" +
+"    return {\n" +
+"      targetSlug: $('targetSlug').value.trim() || activeItemSlug || $('slug').value.trim(),\n" +
+"      slug: $('slug').value.trim(),\n" +
+"      title: $('title').value.trim(),\n" +
+"      excerpt: $('excerpt').value.trim(),\n" +
+"      publishedAt: $('publishedAt').value.trim() || new Date().toISOString(),\n" +
+"      tags: $('tags').value,\n" +
+"      html: $('html').value\n" +
+"    };\n" +
+"  }\n" +
+"\n" +
+"  $('publisherForm').addEventListener('submit', function (event) {\n" +
+"    event.preventDefault();\n" +
+"\n" +
+"    const label = $('label').value.trim() || $('type').value.trim();\n" +
+"    const baseUrl = $('baseUrl').value.trim().replace(/\\/$/, '');\n" +
+"    const type = $('type').value.trim() || 'article';\n" +
+"    const apiKey = $('apiKey').value.trim();\n" +
+"\n" +
+"    if (!baseUrl || !apiKey || !type) {\n" +
+"      notify('Base URL, content type and API key are required.', 'error');\n" +
+"      return;\n" +
+"    }\n" +
+"\n" +
+"    const id = publisherIdFrom(label, baseUrl, type);\n" +
+"    const publishers = getPublishers().filter(function (publisher) { return publisher.id !== id; });\n" +
+"    publishers.push({ id: id, label: label, baseUrl: baseUrl, type: type, apiKey: apiKey });\n" +
+"    setPublishers(publishers);\n" +
+"    loadPublishers();\n" +
+"    notify('Publisher saved in this browser.');\n" +
+"  });\n" +
+"\n" +
+"  $('editorForm').addEventListener('submit', async function (event) {\n" +
+"    event.preventDefault();\n" +
+"    try {\n" +
+"      await postJson('/api/proxy/save', Object.assign({}, publisherPayload(), { article: collectArticle() }));\n" +
+"      notify('Item saved.');\n" +
+"      await reloadItems();\n" +
+"    } catch (error) {\n" +
+"      notify(error.message, 'error');\n" +
+"    }\n" +
+"  });\n" +
+"\n" +
+"  window.createItem = async function () {\n" +
+"    try {\n" +
+"      await postJson('/api/proxy/create', Object.assign({}, publisherPayload(), { article: collectArticle() }));\n" +
+"      notify('Item created.');\n" +
+"      await reloadItems();\n" +
+"    } catch (error) {\n" +
+"      notify(error.message, 'error');\n" +
+"    }\n" +
+"  };\n" +
+"\n" +
+"  window.deleteItem = async function () {\n" +
+"    if (!confirm('Delete this item?')) return;\n" +
+"    try {\n" +
+"      await postJson('/api/proxy/delete', Object.assign({}, publisherPayload(), { slug: $('targetSlug').value.trim() || activeItemSlug }));\n" +
+"      notify('Item deleted.');\n" +
+"      $('editorForm').hidden = true;\n" +
+"      await reloadItems();\n" +
+"    } catch (error) {\n" +
+"      notify(error.message, 'error');\n" +
+"    }\n" +
+"  };\n" +
+"\n" +
+"  window.togglePreview = function () {\n" +
+"    const panel = $('previewPanel');\n" +
+"    panel.hidden = !panel.hidden;\n" +
+"    if (!panel.hidden) renderPreview();\n" +
+"  };\n" +
+"\n" +
+"  function renderPreview() {\n" +
+"    const field = $('html');\n" +
+"    const frame = $('previewFrame');\n" +
+"    if (!field || !frame) return;\n" +
+"\n" +
+"    const doc = frame.contentDocument || frame.contentWindow.document;\n" +
+"    doc.open();\n" +
+"    doc.write('<!doctype html><html><head><meta charset=\\\"utf-8\\\"><base target=\\\"_blank\\\"><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.6;margin:28px;color:#111827}img{max-width:100%;height:auto}</style></head><body>' + field.value + '</body></html>');\n" +
+"    doc.close();\n" +
+"  }\n" +
+"\n" +
+"  document.addEventListener('click', function (event) {\n" +
+"    const openPublisherButton = event.target.closest('.js-open-publisher');\n" +
+"    if (openPublisherButton) { selectPublisher(openPublisherButton.dataset.id); return; }\n" +
+"\n" +
+"    const deletePublisherButton = event.target.closest('.js-delete-publisher');\n" +
+"    if (deletePublisherButton) { removePublisher(deletePublisherButton.dataset.id); return; }\n" +
+"\n" +
+"    const openItemButton = event.target.closest('.js-open-item');\n" +
+"    if (openItemButton) openItem(openItemButton.dataset.slug);\n" +
+"  });\n" +
+"\n" +
+"  $('html').addEventListener('input', function () {\n" +
+"    clearTimeout(window.__previewTimer);\n" +
+"    window.__previewTimer = setTimeout(renderPreview, 250);\n" +
+"  });\n" +
+"\n" +
+"  loadPublishers();\n" +
+"})();\n";
 }
 
 app.listen(PORT, HOST, () => {
