@@ -4,9 +4,10 @@
   Single-file local server for managing remote publisher instances.
 
   Design goals:
-  - one server.js file only;
+  - one server.js runtime file;
+  - optional external styles.css next to server.js;
+  - if styles.css does not exist, the app renders without custom styles;
   - full server-side rendering;
-  - clean dark-mode UI;
   - local-only access on 127.0.0.1;
   - 4-digit PIN gate on first launch, stored in the browser only;
   - collections and publisher instances stored locally;
@@ -24,7 +25,11 @@
   Optional environment variables:
     PORT=4545
     APP_NAME=LocalPublisherConsole
-    DATA_DIR=C:\path\to\data
+    DATA_DIR=/path/to/data
+    STYLE_FILE=/path/to/styles.css
+    MAX_BODY_SIZE=10mb
+    REQUEST_TIMEOUT_MS=30000
+    DISABLE_OPEN_BROWSER=1
 */
 
 const express = require("express");
@@ -45,6 +50,7 @@ const SESSION_TOKEN = crypto.randomBytes(32).toString("hex");
 const DATA_DIR = process.env.DATA_DIR || getAppDataDir(APP_NAME);
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const CREDENTIALS_DIR = path.join(DATA_DIR, "credentials");
+const STYLE_FILE = process.env.STYLE_FILE || path.join(__dirname, "styles.css");
 
 app.use(express.urlencoded({ extended: true, limit: MAX_BODY_SIZE }));
 app.use(express.json({ limit: MAX_BODY_SIZE }));
@@ -99,8 +105,7 @@ async function writeConfig(config) {
 async function writeJsonAtomic(filePath, data) {
   const tempPath = `${filePath}.tmp`;
   await fsp.mkdir(path.dirname(filePath), { recursive: true });
-  await fsp.writeFile(tempPath, JSON.stringify(data, null, 2) + "
-", "utf8");
+  await fsp.writeFile(tempPath, JSON.stringify(data, null, 2) + "\n", "utf8");
   await fsp.rename(tempPath, filePath);
 }
 
@@ -200,10 +205,10 @@ function assertSafeRemotePath(value) {
   const remotePath = String(value || "").trim();
 
   if (!remotePath.startsWith("/")) {
-    throw new Error("Remote path must start with /. ");
+    throw new Error("Remote path must start with /.");
   }
 
-  if (remotePath.includes("\")) {
+  if (remotePath.includes("\\")) {
     throw new Error("Remote path contains invalid characters.");
   }
 
@@ -307,6 +312,19 @@ async function remoteRequest(publisher, remotePath, options = {}) {
 // ------------------------------------------------------------
 
 app.use(requireLocalhost);
+
+app.get("/styles.css", (req, res) => {
+  try {
+    if (!fs.existsSync(STYLE_FILE)) {
+      res.type("text/css").send("");
+      return;
+    }
+
+    res.type("text/css").send(fs.readFileSync(STYLE_FILE, "utf8"));
+  } catch (error) {
+    res.type("text/css").send("");
+  }
+});
 
 app.get("/", async (req, res) => {
   const config = await readConfig();
@@ -585,8 +603,7 @@ app.post("/collections/:collectionId/publishers/:publisherId/articles/:slug", re
 app.get("/credentials-template", (req, res) => {
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("content-disposition", "attachment; filename=publisher-credentials.example.json");
-  res.send(JSON.stringify(defaultCredentialsPayload({ password: "your-admin-password" }), null, 2) + "
-");
+  res.send(JSON.stringify(defaultCredentialsPayload({ password: "your-admin-password" }), null, 2) + "\n");
 });
 
 app.get("/health", (req, res) => {
@@ -595,7 +612,9 @@ app.get("/health", (req, res) => {
     app: APP_NAME,
     port: PORT,
     dataDir: DATA_DIR,
-    credentialsDir: CREDENTIALS_DIR
+    credentialsDir: CREDENTIALS_DIR,
+    styleFile: STYLE_FILE,
+    styleLoaded: fs.existsSync(STYLE_FILE)
   });
 });
 
@@ -610,7 +629,7 @@ function renderLayout({ title, active, content, script = "" }) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} · ${escapeHtml(APP_NAME)}</title>
-  <style>${renderStyles()}</style>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body data-token="${SESSION_TOKEN}">
   <div id="pinGate" class="pin-gate" hidden>
@@ -643,6 +662,8 @@ function renderLayout({ title, active, content, script = "" }) {
         <code>${escapeHtml(DATA_DIR)}</code>
         <span>Credentials</span>
         <code>${escapeHtml(CREDENTIALS_DIR)}</code>
+        <span>Stylesheet</span>
+        <code>${escapeHtml(STYLE_FILE)}</code>
       </div>
     </aside>
 
@@ -736,7 +757,7 @@ function renderCollection(collection) {
 
     <div class="credential-existing-fields">
       <label>Existing credentials file path</label>
-      <input name="credentialsFilePath" placeholder="C:\Users\You\publisher-credentials.json">
+      <input name="credentialsFilePath" placeholder="/path/to/publisher-credentials.json">
     </div>
 
     <button type="submit">Add publisher</button>
@@ -928,6 +949,7 @@ function renderSetup() {
   "headers": {}
 }</pre>
   <p>Only the file path is stored in <code>${escapeHtml(CONFIG_FILE)}</code>.</p>
+  <p>Optional stylesheet path: <code>${escapeHtml(STYLE_FILE)}</code>. If it does not exist, the console runs without custom styling.</p>
   <a class="button" href="/credentials-template">Download template</a>
 </section>`;
 }
@@ -951,330 +973,6 @@ function renderError(error) {
 
 function tokenInput() {
   return `<input type="hidden" name="_token" value="${SESSION_TOKEN}">`;
-}
-
-function renderStyles() {
-  return `
-:root {
-  --bg: #080b12;
-  --surface: #0f1420;
-  --surface-2: #151c2b;
-  --surface-3: #1b2435;
-  --line: #273247;
-  --text: #e6edf7;
-  --muted: #93a4b8;
-  --faint: #65758b;
-  --accent: #7dd3fc;
-  --accent-2: #a7f3d0;
-  --danger: #fb7185;
-  --success: #34d399;
-  --shadow: 0 24px 70px rgba(0, 0, 0, .34);
-  --radius: 18px;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  min-height: 100vh;
-  color: var(--text);
-  font-family: var(--sans);
-  background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, .11), transparent 34rem),
-    radial-gradient(circle at bottom right, rgba(167, 243, 208, .08), transparent 30rem),
-    var(--bg);
-}
-a { color: inherit; text-decoration: none; }
-button, .button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  border: 0;
-  border-radius: 999px;
-  padding: 0 16px;
-  color: #04111f;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  font-weight: 750;
-  cursor: pointer;
-}
-button.ghost, .button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
-button.small, .button.small { min-height: 32px; padding: 0 12px; font-size: 13px; }
-.icon-button {
-  position: relative;
-  z-index: 2;
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
-  padding: 0;
-  color: var(--muted);
-  background: var(--surface-3);
-}
-input, textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 11px 12px;
-  color: var(--text);
-  background: rgba(8, 11, 18, .72);
-  outline: none;
-  font: inherit;
-}
-input:focus, textarea:focus { border-color: var(--accent); }
-textarea {
-  min-height: 520px;
-  resize: vertical;
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.55;
-}
-label {
-  display: block;
-  margin: 12px 0 6px;
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-}
-label.checkbox {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  text-transform: none;
-  letter-spacing: 0;
-}
-label.checkbox input { width: auto; }
-code, pre { font-family: var(--mono); }
-code {
-  color: var(--accent);
-  overflow-wrap: anywhere;
-}
-pre {
-  overflow: auto;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #070a11;
-  color: var(--text);
-}
-.pin-gate {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: var(--bg);
-  z-index: 10;
-}
-.pin-card {
-  width: min(420px, 100%);
-  padding: 28px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02));
-  box-shadow: var(--shadow);
-}
-.pin-card h1 { margin: 4px 0 8px; font-size: 34px; letter-spacing: -.05em; }
-.pin-card p { margin: 0 0 18px; color: var(--muted); line-height: 1.5; }
-.pin-card input {
-  height: 58px;
-  margin-bottom: 14px;
-  text-align: center;
-  font-size: 28px;
-  letter-spacing: .5em;
-  font-family: var(--mono);
-}
-.microcopy { margin-top: 16px !important; font-size: 12px; }
-#appShell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-}
-.sidebar {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  padding: 20px;
-  border-right: 1px solid var(--line);
-  background: rgba(8, 11, 18, .78);
-  backdrop-filter: blur(16px);
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-.brand { display: flex; gap: 12px; align-items: center; }
-.brand-mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  color: #04111f;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  font-weight: 900;
-}
-.brand span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
-nav { display: grid; gap: 8px; }
-nav a {
-  padding: 10px 12px;
-  border-radius: 12px;
-  color: var(--muted);
-}
-nav a.active, nav a:hover { color: var(--text); background: var(--surface-2); }
-.sidebar-footer {
-  margin-top: auto;
-  display: grid;
-  gap: 8px;
-  color: var(--faint);
-  font-size: 12px;
-}
-.main { padding: 28px clamp(18px, 4vw, 52px) 56px; }
-.hero, .page-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
-  gap: 20px;
-  align-items: start;
-  margin-bottom: 22px;
-}
-.page-head { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-h1, h2, p { margin-top: 0; }
-h1 { margin-bottom: 10px; font-size: clamp(32px, 5vw, 58px); letter-spacing: -.065em; line-height: .95; }
-h2 { margin-bottom: 12px; font-size: 18px; letter-spacing: -.02em; }
-p { color: var(--muted); line-height: 1.58; }
-.eyebrow {
-  color: var(--accent);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .13em;
-  font-weight: 800;
-}
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
-  box-shadow: var(--shadow);
-}
-.compact-form { padding: 18px; }
-.compact-form button { width: 100%; margin-top: 14px; }
-.credentials-panel { margin-bottom: 18px; }
-.grid-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-}
-.card-link {
-  position: relative;
-  min-height: 170px;
-  padding: 18px;
-  overflow: hidden;
-}
-.card-cover { position: absolute; inset: 0; z-index: 1; }
-.card-link h2, .card-link p, .card-link code, .card-topline { position: relative; z-index: 2; }
-.card-link p { margin-bottom: 8px; }
-.card-topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 22px; }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  background: rgba(255,255,255,.025);
-  font-size: 12px;
-}
-.segmented {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255,255,255,.02);
-}
-.segmented label {
-  margin: 0;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.segmented input { width: auto; }
-.credential-existing-fields { display: none; }
-body.use-existing-credentials .credential-existing-fields { display: block; }
-body.use-existing-credentials .credential-generation-fields { display: none; }
-.empty {
-  grid-column: 1 / -1;
-  padding: 30px;
-  border: 1px dashed var(--line);
-  border-radius: var(--radius);
-  color: var(--muted);
-  display: grid;
-  gap: 8px;
-}
-.empty strong { color: var(--text); }
-.inline-form {
-  display: flex;
-  align-items: end;
-  gap: 10px;
-}
-.inline-form label { margin: 0 0 6px; }
-.inline-form input { min-width: 160px; }
-.table-panel { padding: 0; overflow: hidden; }
-.panel-title {
-  min-height: 62px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.panel-title h2 { margin: 0; }
-.table-wrap { overflow: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  vertical-align: middle;
-}
-th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-td small { display: block; margin-top: 4px; color: var(--muted); }
-.right { text-align: right; }
-.notice {
-  margin-bottom: 18px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-}
-.notice.error { color: var(--danger); background: rgba(251, 113, 133, .08); border-color: rgba(251, 113, 133, .28); }
-.notice.success { color: var(--success); background: rgba(52, 211, 153, .08); border-color: rgba(52, 211, 153, .28); }
-.editor-grid {
-  display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-.editor-form { padding-bottom: 18px; }
-.editor-form > label, .editor-form > input, .editor-form > textarea, .editor-form > button { margin-left: 18px; margin-right: 18px; width: calc(100% - 36px); }
-.editor-form > button { margin-top: 16px; }
-.editor-form.wide textarea { min-height: 620px; }
-.preview-panel { margin-top: 18px; overflow: hidden; }
-.preview-panel iframe {
-  width: 100%;
-  min-height: 520px;
-  border: 0;
-  background: white;
-}
-.prose { padding: 22px; }
-@media (max-width: 980px) {
-  #appShell { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; }
-  .hero, .page-head, .editor-grid { grid-template-columns: 1fr; }
-  .inline-form { align-items: stretch; flex-direction: column; }
-}`;
 }
 
 function clientBootstrapScript() {
@@ -1316,7 +1014,7 @@ function clientBootstrapScript() {
     event.preventDefault();
     const pin = pinInput.value.trim();
 
-    if (!/^\d{4}$/.test(pin)) {
+    if (!/^\\d{4}$/.test(pin)) {
       pinHint.textContent = "The PIN must contain exactly 4 digits.";
       return;
     }
@@ -1405,6 +1103,8 @@ function escapeAttr(value) {
 }
 
 function openBrowser(url) {
+  if (process.env.DISABLE_OPEN_BROWSER === "1") return;
+
   const command = process.platform === "win32"
     ? `start "" "${url}"`
     : process.platform === "darwin"
@@ -1425,6 +1125,8 @@ ensureStorage()
       console.log(`${APP_NAME} running on ${url}`);
       console.log(`Data directory: ${DATA_DIR}`);
       console.log(`Credentials directory: ${CREDENTIALS_DIR}`);
+      console.log(`Style file: ${STYLE_FILE}`);
+      console.log(`Style loaded: ${fs.existsSync(STYLE_FILE) ? "yes" : "no"}`);
       console.log(`Local server token: ${SESSION_TOKEN}`);
       openBrowser(url);
     });
