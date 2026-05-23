@@ -42,7 +42,7 @@ const { exec } = require("child_process");
 
 const app = express();
 
-const PORT = Number(process.env.PORT || 4545);
+const PORT = Number(process.env.PORT || 3000);
 const APP_NAME = String(process.env.APP_NAME || "LocalPublisherConsole").trim();
 const MAX_BODY_SIZE = process.env.MAX_BODY_SIZE || "10mb";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000);
