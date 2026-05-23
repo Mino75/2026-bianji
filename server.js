@@ -33,10 +33,6 @@ const MAX_BODY_SIZE = process.env.MAX_BODY_SIZE || "25mb";
 app.use(express.urlencoded({ extended: true, limit: MAX_BODY_SIZE }));
 app.use(express.json({ limit: MAX_BODY_SIZE }));
 
-// ------------------------------------------------------------
-// Routes
-// ------------------------------------------------------------
-
 app.get("/styles.css", (req, res) => {
   if (!fs.existsSync(STYLE_FILE)) {
     res.type("text/css").send("");
@@ -65,9 +61,7 @@ app.post("/api/proxy/list", async (req, res) => {
       apiKey: publisher.apiKey,
       remotePath: `/api/${encodeURIComponent(publisher.type)}/items`,
       method: "GET",
-      query: {
-        withContent: "false"
-      }
+      query: { withContent: "false" }
     });
 
     res.status(result.status).json(result.body ?? { rawBody: result.rawBody });
@@ -81,9 +75,7 @@ app.post("/api/proxy/read", async (req, res) => {
     const publisher = normalizePublisherPayload(req.body);
     const slug = normalizeSlug(req.body.slug);
 
-    if (!slug) {
-      throw new Error("Slug is required.");
-    }
+    if (!slug) throw new Error("Slug is required.");
 
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
@@ -112,7 +104,7 @@ app.post("/api/proxy/read", async (req, res) => {
 app.post("/api/proxy/save", async (req, res) => {
   try {
     const publisher = normalizePublisherPayload(req.body);
-    const payload = normalizeArticlePayload(req.body.article || {});
+    const article = normalizeArticlePayload(req.body.article || {});
 
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
@@ -120,8 +112,8 @@ app.post("/api/proxy/save", async (req, res) => {
       remotePath: `/api/${encodeURIComponent(publisher.type)}/items`,
       method: "PUT",
       body: {
-        ...payload,
-        html: encodeHtmlForApi(payload.html)
+        ...article,
+        html: encodeHtmlForApi(article.html)
       }
     });
 
@@ -134,7 +126,7 @@ app.post("/api/proxy/save", async (req, res) => {
 app.post("/api/proxy/create", async (req, res) => {
   try {
     const publisher = normalizePublisherPayload(req.body);
-    const payload = normalizeArticlePayload(req.body.article || {});
+    const article = normalizeArticlePayload(req.body.article || {});
 
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
@@ -142,8 +134,8 @@ app.post("/api/proxy/create", async (req, res) => {
       remotePath: `/api/${encodeURIComponent(publisher.type)}/items`,
       method: "POST",
       body: {
-        ...payload,
-        html: encodeHtmlForApi(payload.html)
+        ...article,
+        html: encodeHtmlForApi(article.html)
       }
     });
 
@@ -158,9 +150,7 @@ app.post("/api/proxy/delete", async (req, res) => {
     const publisher = normalizePublisherPayload(req.body);
     const slug = normalizeSlug(req.body.slug);
 
-    if (!slug) {
-      throw new Error("Slug is required.");
-    }
+    if (!slug) throw new Error("Slug is required.");
 
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
@@ -176,14 +166,9 @@ app.post("/api/proxy/delete", async (req, res) => {
   }
 });
 
-// ------------------------------------------------------------
-// Remote API
-// ------------------------------------------------------------
-
 async function remoteRequest({ baseUrl, apiKey, remotePath, method = "GET", query = null, body = null }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   const url = new URL(assertSafeRemotePath(remotePath), baseUrl);
 
   for (const [key, value] of Object.entries(query || {})) {
@@ -218,18 +203,12 @@ async function remoteRequest({ baseUrl, apiKey, remotePath, method = "GET", quer
   };
 }
 
-// ------------------------------------------------------------
-// Normalization
-// ------------------------------------------------------------
-
 function normalizePublisherPayload(body) {
   const baseUrl = normalizeBaseUrl(body.baseUrl);
   const type = normalizeType(body.type || "article");
   const apiKey = String(body.apiKey || "").trim();
 
-  if (!apiKey) {
-    throw new Error("API key is required.");
-  }
+  if (!apiKey) throw new Error("API key is required.");
 
   return { baseUrl, type, apiKey };
 }
@@ -238,9 +217,7 @@ function normalizeArticlePayload(article) {
   const slug = normalizeSlug(article.slug);
   const targetSlug = normalizeSlug(article.targetSlug || article.slug);
 
-  if (!slug) {
-    throw new Error("Slug is required.");
-  }
+  if (!slug) throw new Error("Slug is required.");
 
   return {
     targetSlug,
@@ -261,9 +238,7 @@ function normalizeArticlePayload(article) {
 function normalizeBaseUrl(value) {
   const raw = String(value || "").trim().replace(/\/$/, "");
 
-  if (!raw) {
-    throw new Error("Base URL is required.");
-  }
+  if (!raw) throw new Error("Base URL is required.");
 
   const url = new URL(raw);
 
@@ -282,9 +257,7 @@ function normalizeType(value) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-  if (!type) {
-    throw new Error("Content type is required.");
-  }
+  if (!type) throw new Error("Content type is required.");
 
   return type;
 }
@@ -348,14 +321,6 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
-
-function escapeAttr(value) {
-  return escapeHtml(value).replaceAll("`", "&#96;");
-}
-
-// ------------------------------------------------------------
-// Rendering
-// ------------------------------------------------------------
 
 function renderLayout({ title, content }) {
   return `<!doctype html>
@@ -473,7 +438,7 @@ function renderDashboard() {
 
 <section class="panel preview-panel" id="previewPanel" hidden>
   <div class="panel-title"><h2>Preview</h2></div>
-  <iframe id="previewFrame" sandbox="allow-same-origin"></iframe>
+  <iframe id="previewFrame" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
 </section>
 
 <div id="notice" class="notice" hidden></div>`;
@@ -530,9 +495,7 @@ function clientScript() {
   async function postJson(url, payload) {
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(payload)
     });
 
@@ -566,6 +529,19 @@ function clientScript() {
     };
   }
 
+  function escapeHtml(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replaceAll("`", "&#96;");
+  }
+
   window.loadPublishers = function () {
     const publishers = getPublishers();
     const target = $("publishersList");
@@ -577,7 +553,7 @@ function clientScript() {
     }
 
     target.className = "table-wrap";
-    target.innerHTML = "" +
+    target.innerHTML =
       "<table>" +
       "<thead><tr><th>Label</th><th>Base URL</th><th>Type</th><th></th></tr></thead>" +
       "<tbody>" +
@@ -587,8 +563,8 @@ function clientScript() {
           "<td><code>" + escapeHtml(publisher.baseUrl) + "</code></td>" +
           "<td><code>" + escapeHtml(publisher.type) + "</code></td>" +
           "<td class='right'>" +
-            "<button class='button small' type='button' onclick='selectPublisher(\"" + publisher.id + "\")'>Open</button> " +
-            "<button class='button small ghost' type='button' onclick='removePublisher(\"" + publisher.id + "\")'>Delete</button>" +
+            "<button class='button small js-open-publisher' type='button' data-id='" + escapeAttr(publisher.id) + "'>Open</button> " +
+            "<button class='button small ghost js-delete-publisher' type='button' data-id='" + escapeAttr(publisher.id) + "'>Delete</button>" +
           "</td>" +
         "</tr>";
       }).join("") +
@@ -634,7 +610,7 @@ function clientScript() {
       }
 
       target.className = "table-wrap";
-      target.innerHTML = "" +
+      target.innerHTML =
         "<table>" +
         "<thead><tr><th>Title</th><th>Slug</th><th>Updated</th><th></th></tr></thead>" +
         "<tbody>" +
@@ -643,7 +619,7 @@ function clientScript() {
             "<td><strong>" + escapeHtml(item.title || item.slug || "Untitled") + "</strong><small>" + escapeHtml(item.excerpt || "") + "</small></td>" +
             "<td><code>" + escapeHtml(item.slug || "") + "</code></td>" +
             "<td>" + escapeHtml(item.updatedAt || item.publishedAt || "") + "</td>" +
-            "<td class='right'><button class='button small' type='button' onclick='openItem(\"" + escapeHtml(item.slug || "") + "\")'>Edit</button></td>" +
+            "<td class='right'><button class='button small js-open-item' type='button' data-slug='" + escapeAttr(item.slug || "") + "'>Edit</button></td>" +
           "</tr>";
         }).join("") +
         "</tbody></table>";
@@ -663,9 +639,7 @@ function clientScript() {
 
       const item = Array.isArray(body.items) ? body.items[0] : null;
 
-      if (!item) {
-        throw new Error("Item not found.");
-      }
+      if (!item) throw new Error("Item not found.");
 
       $("editorForm").hidden = false;
       $("targetSlug").value = item.slug || slug;
@@ -782,27 +756,33 @@ function clientScript() {
     doc.close();
   }
 
+  document.addEventListener("click", function (event) {
+    const openPublisherButton = event.target.closest(".js-open-publisher");
+    if (openPublisherButton) {
+      selectPublisher(openPublisherButton.dataset.id);
+      return;
+    }
+
+    const deletePublisherButton = event.target.closest(".js-delete-publisher");
+    if (deletePublisherButton) {
+      removePublisher(deletePublisherButton.dataset.id);
+      return;
+    }
+
+    const openItemButton = event.target.closest(".js-open-item");
+    if (openItemButton) {
+      openItem(openItemButton.dataset.slug);
+    }
+  });
+
   $("html").addEventListener("input", function () {
     clearTimeout(window.__previewTimer);
     window.__previewTimer = setTimeout(renderPreview, 250);
   });
 
-  function escapeHtml(value) {
-    return String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-  }
-
   loadPublishers();
 })();`;
 }
-
-// ------------------------------------------------------------
-// Boot
-// ------------------------------------------------------------
 
 app.listen(PORT, HOST, () => {
   console.log(`${APP_NAME} running on http://${HOST}:${PORT}/`);
