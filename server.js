@@ -988,11 +988,16 @@ function clientBootstrapScript() {
   const pinInput = document.getElementById("pinInput");
   const pinHint = document.getElementById("pinHint");
 
-  async function sha256(value) {
-    const bytes = new TextEncoder().encode(value);
-    const hash = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+function hashPin(value) {
+  let hash = 0;
+
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(i);
+    hash |= 0;
   }
+
+  return String(hash);
+}
 
   function unlock() {
     pinGate.hidden = true;
@@ -1022,7 +1027,7 @@ function clientBootstrapScript() {
       return;
     }
 
-    const hash = await sha256(pin);
+    const hash = hashPin(pin);
     const current = localStorage.getItem(pinKey);
 
     if (!current) {
@@ -1105,17 +1110,6 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll("`", "&#96;");
 }
 
-function openBrowser(url) {
-  if (process.env.DISABLE_OPEN_BROWSER === "1") return;
-
-  const command = process.platform === "win32"
-    ? `start "" "${url}"`
-    : process.platform === "darwin"
-      ? `open "${url}"`
-      : `xdg-open "${url}"`;
-
-  exec(command, () => {});
-}
 
 // ------------------------------------------------------------
 // Boot
@@ -1131,7 +1125,6 @@ ensureStorage()
       console.log(`Style file: ${STYLE_FILE}`);
       console.log(`Style loaded: ${fs.existsSync(STYLE_FILE) ? "yes" : "no"}`);
       console.log(`Local server token: ${SESSION_TOKEN}`);
-      openBrowser(url);
     });
   })
   .catch((error) => {
