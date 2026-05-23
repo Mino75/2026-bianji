@@ -43,6 +43,7 @@ const { exec } = require("child_process");
 const app = express();
 
 const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || "127.0.0.1";
 const APP_NAME = String(process.env.APP_NAME || "LocalPublisherConsole").trim();
 const MAX_BODY_SIZE = process.env.MAX_BODY_SIZE || "10mb";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000);
@@ -311,7 +312,9 @@ async function remoteRequest(publisher, remotePath, options = {}) {
 // Routes
 // ------------------------------------------------------------
 
-app.use(requireLocalhost);
+if (process.env.ALLOW_REMOTE !== "1") {
+  app.use(requireLocalhost);
+}
 
 app.get("/styles.css", (req, res) => {
   try {
@@ -1120,7 +1123,7 @@ function openBrowser(url) {
 
 ensureStorage()
   .then(() => {
-    app.listen(PORT, "127.0.0.1", () => {
+    app.listen(PORT, HOST, () => {
       const url = `http://127.0.0.1:${PORT}/`;
       console.log(`${APP_NAME} running on ${url}`);
       console.log(`Data directory: ${DATA_DIR}`);
