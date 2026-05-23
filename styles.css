@@ -26,7 +26,6 @@
     Menlo,
     Monaco,
     Consolas,
-    "Liberation Mono",
     monospace;
 
   --sans:
@@ -177,19 +176,6 @@ label {
   color: var(--muted);
 }
 
-label.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-label.checkbox input {
-  width: auto;
-}
-
 code,
 pre {
   font-family: var(--mono);
@@ -210,11 +196,6 @@ pre {
 
   background: #070a11;
   color: var(--text);
-}
-
-.microcopy {
-  margin-top: 16px !important;
-  font-size: 12px;
 }
 
 #appShell {
@@ -301,17 +282,6 @@ nav a:hover,
 nav a.active {
   background: var(--surface-2);
   color: var(--text);
-}
-
-.sidebar-footer {
-  margin-top: auto;
-
-  display: grid;
-  gap: 8px;
-
-  font-size: 12px;
-
-  color: var(--faint);
 }
 
 .main {
@@ -405,10 +375,6 @@ p {
   margin-top: 14px;
 }
 
-.credentials-panel {
-  margin-bottom: 18px;
-}
-
 .grid-list {
   display: grid;
 
@@ -431,6 +397,21 @@ p {
 .card-cover {
   position: absolute;
   inset: 0;
+  z-index: 1;
+}
+
+.card-topline,
+.card-link h2,
+.card-link p,
+.card-link code {
+  position: relative;
+  z-index: 2;
+}
+
+.card-topline form,
+.icon-button {
+  position: relative;
+  z-index: 3;
 }
 
 .card-topline {
@@ -459,47 +440,6 @@ p {
   color: var(--muted);
 
   font-size: 12px;
-}
-
-.segmented {
-  display: grid;
-  gap: 8px;
-
-  margin-top: 14px;
-
-  padding: 12px;
-
-  border: 1px solid var(--line);
-  border-radius: 14px;
-
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.segmented label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  margin: 0;
-
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.segmented input {
-  width: auto;
-}
-
-.credential-existing-fields {
-  display: none;
-}
-
-body.use-existing-credentials .credential-existing-fields {
-  display: block;
-}
-
-body.use-existing-credentials .credential-generation-fields {
-  display: none;
 }
 
 .empty {
@@ -598,7 +538,7 @@ td small {
 }
 
 .notice {
-  margin-bottom: 18px;
+  margin-top: 18px;
 
   padding: 14px 16px;
 
@@ -632,6 +572,8 @@ td small {
   gap: 18px;
 
   align-items: start;
+
+  margin-top: 18px;
 }
 
 .editor-form {
@@ -669,10 +611,6 @@ td small {
   border: 0;
 
   background: white;
-}
-
-.prose {
-  padding: 22px;
 }
 
 @media (max-width: 980px) {
