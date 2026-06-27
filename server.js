@@ -168,7 +168,7 @@ app.post("/api/proxy/media/list", async (req, res) => {
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
       apiKey: publisher.apiKey,
-      remotePath: "/api/media/items",
+      remotePath: "/api/assets/media",
       method: "GET"
     });
 
@@ -193,7 +193,7 @@ app.post("/api/proxy/media/rename", async (req, res) => {
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
       apiKey: publisher.apiKey,
-      remotePath: "/api/media/items",
+      remotePath: "/api/assets/media",
       method: "PUT",
       body: { targetName, name }
     });
@@ -214,7 +214,7 @@ app.post("/api/proxy/media/delete", async (req, res) => {
     const result = await remoteRequest({
       baseUrl: publisher.baseUrl,
       apiKey: publisher.apiKey,
-      remotePath: "/api/media/items",
+      remotePath: "/api/assets/media",
       method: "DELETE",
       body: { name }
     });
@@ -234,7 +234,7 @@ app.post("/api/proxy/media/upload", upload.single("file"), async (req, res) => {
     const result = await remoteMultipartRequest({
       baseUrl: publisher.baseUrl,
       apiKey: publisher.apiKey,
-      remotePath: "/api/media/items",
+      remotePath: "/api/assets/media",
       file: req.file
     });
 
