@@ -518,22 +518,22 @@ function renderDashboard() {
     <div class="panel-title"><h2 id="metadataTitle">Metadata</h2></div>
 
     <div id="itemMetadataFields">
-      <label>Target slug</label>
+      <label>Target slug (ex : bianji)</label>
       <input id="targetSlug">
 
-      <label>Slug</label>
+      <label>Slug (ex : bianji)</label>
       <input id="slug" required>
 
-      <label>Title</label>
+      <label>Title (ex : bianji - remote publisher)</label>
       <input id="title">
 
-      <label>Excerpt</label>
+      <label>Excerpt (ex : Configure a remote publisher...) </label>
       <input id="excerpt">
 
-      <label>Published at</label>
+      <label>Published at ( ex : 2026-08-23T00:55:00.000Z)</label>
       <input id="publishedAt">
 
-      <label>Tags</label>
+      <label>Tags (ex : publisher, nodejs, bianji)</label>
       <input id="tags" placeholder="tag1, tag2">
 
       <button type="submit">Save item</button>
